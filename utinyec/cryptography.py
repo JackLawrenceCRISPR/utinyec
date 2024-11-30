@@ -10,16 +10,79 @@ from ucryptolib import aes
 #https://hwwong168.wordpress.com/2019/09/25/esp32-micropython-implementation-of-cryptographic/
 
 class uECcrypto:
-    def __init__(self, curve_name="secp256r1", private_key_int=None):
+    def __init__(self, curve_name="secp256r1", private_key_int=None, block_size=16, enable_public_key_caching=True):
         self.curve = self.get_curve_from_name(curve_name)
         self.keypair, self.public_key_point = self.make_keypair(self.curve,private_key_int)
-        self.block_size = 16
+        self.block_size = block_size
+        self.public_key_caching = enable_public_key_caching
+        self.public_key_cache = {}
+    
+    #public key -> shared secret caching
+    def clear_public_key_cache(self):
+        self.public_key_cache = {}
+    
+    def add_public_key_to_cache(self, public_key_tuple, derived_shared_secret):
+        self.public_key_cache[public_key_tuple] = derived_shared_secret
+    
+    def check_public_key_cache(self,public_key_tuple):
+        if isinstance(public_key_tuple,tuple) and len(public_key_tuple) == 2:
+            #debug code for caching
+            #print(r"___START_CACHE___")
+            #print(public_key_tuple)
+            #print(self.public_key_cache)
+            #print(self.public_key_cache.get(public_key_tuple))
+            #print(r"___END_CACHE___")
+            return self.public_key_cache.get(public_key_tuple)
+        else:
+            public_key = self.make_public_key(public_key)
+            if public_key.curve == self.curve:
+                public_key_tuple = (public_key.x,public_key.y)
+                return self.check_public_key_cache(public_key_tuple)
+        return None        
+        
+    def set_public_key_caching(self,state):
+        self.public_key_caching = state
+        if not state:
+            self.clear_public_key_cache()
+    #end of caching
 
     def get_private_key_int(self):
         return self.keypair.priv
 
     def get_public_key(self):
-        return (self.keypair.pub.x, self.keypair.pub.y)        
+        return (self.keypair.pub.x, self.keypair.pub.y)   #add curve name?   
+
+    def make_public_key(self,x,y=None,curve=None):
+        #you can just stuff all your values in the x coordinate, it's pretty flexible
+        if isinstance (x,list) or isinstance(x, set):
+            x = tuple(x)
+            
+        if isinstance(x,dict): #should probably be fed in as **dict but whatever
+            curve = x.get("curve") or curve
+            x = (x.get("x"),x.get("y"))
+
+        if isinstance(x,tuple):
+            if len(x) != 2:
+                curve = x[2]
+                x = (x,y)
+        
+        if curve is None:
+            curve = self.curve
+        if isinstance(curve,str):
+            curve = self.get_curve_from_name(curve)
+        
+        #if y is None then x is in "cache" tuple format at this line, otherwise you can use (x,y) as the tuple
+        
+        if isinstance(x,tuple): 
+            y = x[1]
+            x = x[0]
+        
+        if x is None:
+            raise ValueError("X coordinate not specified for make public key")
+        if y is None:
+            raise ValueError("Y coordinate not specified for make public key")
+        
+        return tinyec.Point(curve,x,y)
 
     def get_curve_from_name(self, curve_name):
         return reg.get_curve(curve_name)
@@ -28,6 +91,14 @@ class uECcrypto:
         return tinyec.make_keypair(curve,private_key_int)
 
     def derive_shared_secret(self, public_key):
+        if not isinstance(public_key, tinyec.Point):
+            public_key = self.make_public_key(public_key)
+            
+        if self.public_key_caching == True and public_key.curve == self.curve:
+            known_shared_secret = self.check_public_key_cache( (public_key.x,public_key.y) )
+            if not (known_shared_secret is None):
+                return known_shared_secret
+            
         shared_secret_point = self.keypair.priv * public_key
         x_coordinate = shared_secret_point.x
         field_p = shared_secret_point.curve.field.p
@@ -35,6 +106,9 @@ class uECcrypto:
         bit_len = tinyec.get_bit_length(field_p)
         byte_len = (bit_len + 7) // 8
         shared_secret = int.to_bytes(x_coordinate, byte_len, 'big')
+        
+        if self.public_key_caching == True and public_key.curve == self.curve:
+            self.add_public_key_to_cache( (public_key.x,public_key.y) ,shared_secret)
 
         return shared_secret
 
@@ -96,25 +170,3 @@ class uECcrypto:
             decrypted = cipher.decrypt(ct_bytes)[self.block_size:]
             #print('AES-CBC decrypted:', decrypted)
             return decrypted
-
-
-if __name__ == '__main__':
-    # Example usage:
-    specified_private_key_int = None
-    ecc_aes = uECcrypto('secp256r1', specified_private_key_int) #secp256r1 #brainpoolP256r1
-    curve = reg.get_curve('secp256r1')
-    keypair, public_key = tinyec.make_keypair(curve)
-
-    #other_keypair = tinyec.make_keypair(reg.get_curve('secp256r1'))
-    #public_key = other_keypair.pub
-
-    plaintext = 'This is AES cryptographic'
-    encrypted_cbc = ecc_aes.encrypt(plaintext, public_key, "CBC")
-    decrypted_cbc = ecc_aes.decrypt(encrypted_cbc, public_key, "CBC")
-
-    print('private_key:', ecc_aes.keypair.priv)
-    print('public_key:', f"x{ecc_aes.keypair.pub.x}y{ecc_aes.keypair.pub.y}")
-    print('other_public_key:', public_key)
-    print('AES-CBC encrypted:', encrypted_cbc)
-    print('AES-CBC decrypted:', decrypted_cbc.strip())
-
