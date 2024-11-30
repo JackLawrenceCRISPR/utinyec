@@ -12,7 +12,7 @@ def read_(file_name):
 
 setup(
     name="utinyec",
-    version="0.4.2",
+    version="0.4.3",
     packages=["utinyec"],
     author="Jack Lawrence",
     author_email="JackLawrenceCRISPR@gmail.com",
