@@ -16,7 +16,9 @@ In Thonny you can find it in Tools -> Manage Packages, then search for utinyec.
 ## usage
 ```python
 #Must be micropython, not regular python.
+from utinyec import registry as reg
 from utinyec.cryptography import uECcrypto
+from utinyec import ec as tinyec
 specified_private_key_int = None  #use a previous ecc_session.get_private_key_int() in here to use the same key pair
 curve_name = 'secp256r1'  #see registry.py for a list of curve names
 ecc_session = uECcrypto(curve_name, specified_private_key_int) #
