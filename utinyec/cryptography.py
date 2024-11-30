@@ -1,8 +1,8 @@
 #WARNING: **This is not a library suitable for production.** It is useful for security professionals to understand the inner workings of EC, and be able to play with pre-defined curves.
 #No really! This module has NOT been checked by any security or cryptographic professional, it should NOT be used in production.
 
-import tinyec.registry as reg
-import tinyec.ec as tinyec
+import utinyec.registry as reg
+import utinyec.ec as tinyec
 from uos import urandom
 from ucryptolib import aes
 
@@ -117,3 +117,4 @@ if __name__ == '__main__':
     print('other_public_key:', public_key)
     print('AES-CBC encrypted:', encrypted_cbc)
     print('AES-CBC decrypted:', decrypted_cbc.strip())
+
