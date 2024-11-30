@@ -15,7 +15,7 @@ setup(
     version="0.4.2",
     packages=["utinyec"],
     author="Jack Lawrence",
-    author_email="JackLawrenceCRISPR@protonmail.com",
+    author_email="JackLawrenceCRISPR@gmail.com",
     description=(
         "A tiny library to perform potentially unsafe cryptography with arithmetic operations on elliptic curves in pure micropython."),
     license="aGPLv3",
