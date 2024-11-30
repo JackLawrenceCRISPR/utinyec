@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import tinyec.ec as ec
+import utinyec.ec as ec
 
 
 EC_CURVE_REGISTRY = {"brainpoolP160r1": {"p": 0xE95E4A5F737059DC60DFC7AD95B3D8139515620F,
