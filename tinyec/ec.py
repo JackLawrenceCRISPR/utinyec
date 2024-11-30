@@ -1,7 +1,39 @@
 # -*- coding: utf-8 -*-
-import random
+from uos import urandom #CHANGE: random to uos.urandom
+#by the way, os.urandom and urandom are NOT the same
+#urandom is a micropython optimised random module
+#os.urandom is a function to get a string of size random bytes suitable for cryptographic use (supposedly)
+#uos is os optimised for microcontollers so we use it instead of os
 
-import warnings
+#import warnings    #CHANGE: dropped warnings dependency
+
+#CHANGE: added two functions which are natively available in python, but not micropython
+def get_bit_length(value):  #gets the bit length of an input, same as .bit_length() on an int in regular python
+    if value == 0:
+        return 1
+    bit_length = 0
+    while value > 0:
+        value >>= 1
+        bit_length += 1
+    return bit_length
+
+def get_random_big_number(max_value): #like math.random(x) where x is bigger than sys.maxsize
+    #calculate bit length of max value and round up to nearest multiple of 8
+    bit_length = ((get_bit_length(max_value) + 7) // 8) * 8
+    
+    #calculate number of bytes needed for desired bit length
+    byte_length = (bit_length + 7) // 8
+    
+    while True:
+        #generate random bytes
+        random_bytes = urandom(byte_length)
+        
+        #convert byte sequence to a big integer
+        random_number = int.from_bytes(random_bytes, 'big')
+        
+        #ensure random number is within the desired range
+        if random_number <= max_value:
+            return random_number
 
 # Python3 compatibility
 try:
@@ -9,12 +41,23 @@ try:
 except NameError:
     LONG_TYPE = int
 
+#CHANGE: updated the egcd function to use a while loop rather than recursion, as micropython only has an recursion depth of 20 
+#def egcd(a, b):	
+#    if a == 0:
+#        return b, 0, 1
+#    else:
+#        g, y, x = egcd(b % a, a)
+#        return g, x - (b // a) * y, y
 def egcd(a, b):
-    if a == 0:
-        return b, 0, 1
-    else:
-        g, y, x = egcd(b % a, a)
-        return g, x - (b // a) * y, y
+    x0, x1 = 0, 1
+    y0, y1 = 1, 0
+
+    while a != 0:
+        q, b, a = b // a, a, b % a
+        y0, y1 = y1, y0 - q * y1
+        x0, x1 = x1, x0 - q * x1
+
+    return b, x0, y0
 
 
 def mod_inv(a, p):
@@ -121,7 +164,8 @@ class Point(object):
         self.p = self.curve.field.p
         self.on_curve = True
         if not self.curve.on_curve(self.x, self.y):
-            warnings.warn("Point (%d, %d) is not on curve \"%s\"" % (self.x, self.y, self.curve))
+            #warnings.warn("Point (%d, %d) is not on curve \"%s\"" % (self.x, self.y, self.curve)) 
+            print("Warning: Point (%d, %d) is not on curve \"%s\"" % (self.x, self.y, self.curve)) #CHANGE: dropped warnings dependency
             self.on_curve = False
 
     def __m(self, p, q):
@@ -195,10 +239,16 @@ class Point(object):
         return self.__str__()
 
 
-def make_keypair(curve):
-    priv = random.randint(1, curve.field.n)
-    pub = priv * curve.g
-    return Keypair(curve, priv, pub)
+#CHANGE to make_keypairs:
+# 1. modified function to allow predetermined private_key_int
+# 2. ranint can't handle large integers in micropython, so it now uses the custom random big number function defined earlier
+# 3. it now returns the public key coordinates for ease of use
+def make_keypair(curve, private_key_int = None):
+    #priv = random.randint(1, curve.field.n)
+    if private_key_int is None:
+        private_key_int = get_random_big_number(curve.field.n - 2) + 1
+    pub = private_key_int * curve.g
+    return Keypair(curve, private_key_int, pub), pub
 
 
 class Keypair(object):
