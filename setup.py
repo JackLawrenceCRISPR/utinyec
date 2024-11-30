@@ -11,21 +11,17 @@ def read_(file_name):
 
 
 setup(
-    name="tinyec",
-    version="0.4.1",
-    packages=["tinyec"],
-    author="Alex Moneger",
-    author_email="alexmgr+github@gmail.com",
+    name="utinyec",
+    version="0.4.2",
+    packages=["utinyec"],
+    author="Jack Lawrence",
+    author_email="JackLawrenceCRISPR@protonmail.com",
     description=(
-        "A tiny library to perform arithmetic operations on elliptic curves in pure python"),
-    license="GPLv3",
+        "A tiny library to perform potentially unsafe cryptography with arithmetic operations on elliptic curves in pure micropython."),
+    license="aGPLv3",
     keywords=["elliptic", "curves", "crypto", "tls", "ssl", "ecdhe", "diffie-hellman"],
-    url="https://github.com/alexmgr/tinyec",
-    download_url="https://github.com/alexmgr/tinyec/archive/v0.4.0.tar.gz",
+    url="https://github.com/JackLawrenceCRISPR/utinyec",
     long_description=read_("README.md"),
     long_description_content_type="text/markdown",
-    test_suite="nose.collector",
-    tests_require=["nose"],
-    classifiers=[
-        "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3"])
+    classifiers=["Programming Language :: Python :: Implementation :: MicroPython"]
+)
