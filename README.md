@@ -16,26 +16,112 @@ In Thonny you can find it in Tools -> Manage Packages, then search for utinyec.
 ## usage
 ```python
 #Must be micropython, not regular python.
-from utinyec import registry as reg
+print('please be patient, this may take a while...')
+
+#init:
 from utinyec.cryptography import uECcrypto
-from utinyec import ec as tinyec
-specified_private_key_int = None  #use a previous ecc_session.get_private_key_int() in here to use the same key pair
+specified_private_key_int = None  #use a previous alices_session.get_private_key_int() in here to use the same key pair
 curve_name = 'secp256r1'  #see registry.py for a list of curve names
-ecc_session = uECcrypto(curve_name, specified_private_key_int) #
+alices_session = uECcrypto(curve_name, specified_private_key_int) # derive_shared_secret AES256 keys are 
+print('alices_session is ready...')
 
 #now we will generate a public_key position (x and y coordinates) which will represent the "other" public key being given to us
-curve = reg.get_curve(curve_name)
-keypair, other_public_key = tinyec.make_keypair(curve)
+bobs_session = uECcrypto(curve_name)
+print('bobs_session is ready...')
 
-plaintext = 'This is AES cryptographic'
-encrypted_cbc = ecc_session.encrypt(plaintext, other_public_key, "CBC")
-decrypted_cbc = ecc_session.decrypt(encrypted_cbc, other_public_key, "CBC")
+#exchange keys over network, see examples below
+alices_public_key = alices_session.get_public_key()
+bobs_public_key = bobs_session.get_public_key()
+print("bob and alice exchange public keys...")
 
-print('private_key:', ecc_session.keypair.priv)
-print('public_key:', f"x{ecc_session.keypair.pub.x}y{ecc_session.keypair.pub.y}")
-print('other_public_key:', other_public_key)
-print('AES-CBC encrypted:', encrypted_cbc)
-print('AES-CBC decrypted:', decrypted_cbc.strip())
+#temporary keypair example:
+#from utinyec import registry as reg
+#from utinyec import ec as tinyec
+#curve = reg.get_curve(curve_name)
+#keypair, bobs_public_key = tinyec.make_keypair(curve) 
+#
+#this is one-sided, since we didn't really make an actual class. Not really that useful, but shows uECcrypto can be used as a component of a larger project from exposed api calls.
+#encrypted_cbc = alices_session.encrypt(plaintext, bobs_public_key, "CBC")
+#decrypted_cbc = alices_session.decrypt(encrypted_cbc, bobs_public_key, "CBC")
+#
+
+#example other_public_key formats:
+#other_public_key = tinyec.make_public_key()
+#
+#other_public_key = (24186427586325584408744247601395677827137854066598587263728946626505599356143, 54693647365151360530247677535261819666420276295191767359408775310662222563936)
+#
+#other_public_key = {"x":24186427586325584408744247601395677827137854066598587263728946626505599356143,
+#                    "y":54693647365151360530247677535261819666420276295191767359408775310662222563936,
+#                    "curve":curve_name} #specifying "curve" is optional, the class will use it's own if none is provided. Curve can be a name or the Curve class object
+#
+#the dictionary format is particularly useful as it is JSON serializable for network transmission, you can create it with {"x":alices_session.keypair.x,"y":alices_session.keypair.y}
+#then just import json (or ujson in micropython) and run ujson.dumps(public_key_dict) then use urequests with networking to send to another microcontroller for key exchange
+#remember, this has not been validated and should not be used in production, only as an example to demonstrate how an ECC key exchange could work in a network
+
+
+#cryptography demonstration
+plaintext = 'This is AES cryptographic'.strip() #secret message that alice will send to bob, note that blank spaces will be trimmed due to block padding
+print('alice is encrypting her message...')
+encrypted_message = alices_session.encrypt(plaintext, bobs_public_key, "CBC")	#alices_session will encrypt using the derived shared secret
+print('alice has encrypted her message and sends it to bob...')
+decrypted_message = bobs_session.decrypt(encrypted_message, alices_public_key, "CBC")	#the second alices_session will derive the same shared secret with the other key combination, then decrypt the data
+print('bob has decrypted alices message...')
+
+#analysis of results:
+print("")
+print("RESULT:")
+#what alice knows:
+print("")
+print("alices_session private",alices_session.keypair.priv) #alice shouldn't share this with anyone!
+print('bobs_session public:',bobs_public_key)
+alices_shared_secret = alices_session.derive_shared_secret(bobs_public_key)
+print('alices shared secret:', alices_shared_secret) #this is faster with caching enabled, also alice shouldn't share this with anyone!
+
+#what bob knows:
+print("")
+print("bobs_session private",bobs_session.keypair.priv) #bob shouldn't share this with anyone!
+print('alices_session public:',alices_public_key)
+bobs_shared_secret = bobs_session.derive_shared_secret(alices_public_key)
+print('bobs shared secret:',bobs_session.derive_shared_secret(alices_public_key) ) #this is faster with caching enabled, also bob shouldn't share this with anyone!
+
+#remember the man in the middle (MITM) knows both public keys, but should never know any private keys...
+#in theory with Elliptical Curve Cryptography (ECC), deriving a shared secret from two public keys is not possible. Remember this is an example and should not be used in production.
+
+print("")
+print('Alices original message:',plaintext)
+print('Encrypted message:', encrypted_message)
+print('Alices message decrypted by Bob:', decrypted_message.strip())
+
+assert bobs_shared_secret == alices_shared_secret, "Error: alice and bob derived different shared secrets!"
+print("bob and alice have correctly derived the same shared secret")
+assert plaintext == decrypted_message.decode('utf-8').strip(), "Error: bob's decrypted message is not the same as what alice sent!"
+print("bob has correctly read alice's message")
+print("Demonstration complete.")
+
+
+#caching example
+#try toggling off by using enable_public_key_caching=False as an argument in a uECcrypto init or.set_public_key_caching(False)
+#if you do use caches (on by default) you can clear the cache by running .clear_public_key_cache()
+print("")
+print("Demonstrating caching...")
+import utime
+print("3")
+utime.sleep(1)
+print("2")
+utime.sleep(1)
+print("1")
+utime.sleep(1)
+print("GO")
+
+plaintext2 = 'Alice likes eating apples.'.strip() #secret message that alice will send to bob, note that blank spaces will be trimmed due to block padding
+print('alice is encrypting her second message...')
+encrypted_message2 = alices_session.encrypt(plaintext2, bobs_public_key, "CBC")	#if caching is enabled this will be FAST
+print('alice has encrypted her second message and sends it to bob...')
+decrypted_message2 = bobs_session.decrypt(encrypted_message2, alices_public_key, "CBC")	#if caching is enabled this will be FAST
+print('bob has decrypted alices second message...')
+assert plaintext2 == decrypted_message2.decode('utf-8').strip(), "Error: bob's decrypted message is not the same as what alice sent!"
+print("bob has correctly read alice's second message")
+print("Caching demonstration complete.")
 ```
 
 
