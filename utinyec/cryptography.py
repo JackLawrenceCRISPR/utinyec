@@ -183,7 +183,8 @@ class uECcrypto:
             #decrypted = cipher.decrypt(ct_bytes)[self.block_size:]
             #print('AES-CBC decrypted:', decrypted)
             return ct_bytes
-
+        else:
+            raise ValueError(f"Unknown mode: {mode}. Please choose from 'CBC' or 'ECB', where CBC is most secure.")
 
 
     def decrypt(self, ciphertext, public_key, info=b'handshake data', mode="CBC"):
