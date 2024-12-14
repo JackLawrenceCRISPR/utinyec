@@ -3,6 +3,9 @@
 #this is NOT suitable for production, do NOT use this script in production.
 #this script is purely for educational purposes as an example of encryption without any dependencies, in the spirit of the original tinyec project from which this was derived
 #do NOT use this script in production. you have been warned
+#ADDITIONALLY:
+#the encryption performed by this script is vulnerable to oracle attacks as it uses space characters for padding instead of pkcs7
+#to reaffirm, this script is for educational purposes only. Do NOT use this script in production.
 
 #WARNING: **This is not a library suitable for production.** It is useful for security professionals to understand the inner workings of EC, and be able to play with pre-defined curves.
 #No really! This module has NOT been checked by any security or cryptographic professional, it should NOT be used in production.
