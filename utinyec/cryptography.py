@@ -6,6 +6,9 @@ import utinyec.ec as tinyec
 from uos import urandom
 from ucryptolib import aes
 
+import hmac 
+import hashlib 
+
 #ECcrypto class derived from ucryptolib documentation:
 #https://hwwong168.wordpress.com/2019/09/25/esp32-micropython-implementation-of-cryptographic/
 
@@ -90,7 +93,24 @@ class uECcrypto:
     def make_keypair(self, curve, private_key_int=None):
         return tinyec.make_keypair(curve,private_key_int)
 
-    def derive_shared_secret(self, public_key):
+    def hkdf_expand(self, prk, info=b'', dklen=32):
+        """HKDF expand function."""
+        t = b''
+        output_len = 0
+        block_index = 1
+
+        while output_len < dklen:
+            hmac_obj = hmac.new(prk, t + info + bytes([block_index]), hashlib.sha256)
+            t = hmac_obj.digest()
+            output_len += len(t)
+
+        return t[:dklen]
+
+    def hkdf_extract(self, salt, ikm):
+        """HKDF extract function."""
+        return hmac.new(salt, ikm, hashlib.sha256).digest()
+
+    def derive_shared_secret(self, public_key, info=b'handshake data'):
         if not isinstance(public_key, tinyec.Point):
             public_key = self.make_public_key(public_key)
             
@@ -105,22 +125,46 @@ class uECcrypto:
 
         bit_len = tinyec.get_bit_length(field_p)
         byte_len = (bit_len + 7) // 8
-        shared_secret = int.to_bytes(x_coordinate, byte_len, 'big')
-        
+        shared_secret_seed = int.to_bytes(x_coordinate, byte_len, 'big')
+   
+        # Extract with HKDF (use HMAC-SHA256 with zero-length salt to produce PRK)
+        prk = self.hkdf_extract(b'', shared_secret_seed)
+        # Expand with HKDF (expand PRK into symmetric key of desired length using info)
+        shared_secret = self.hkdf_expand(prk, info, dklen=32)  # dklen needs to be 256 bits (32) for AES-256
+
         if self.public_key_caching == True and public_key.curve == self.curve:
             self.add_public_key_to_cache( (public_key.x,public_key.y) ,shared_secret)
 
         return shared_secret
 
-    def encrypt(self, plaintext, public_key, mode="CBC"):
-        key = self.derive_shared_secret(public_key)
-        pad = self.block_size - len(plaintext) % self.block_size
-        plaintext = plaintext + " "*pad
-        
+
+    def pkcs7_pad(self, data, block_size):
+        pad_length = block_size - (len(data) % block_size)
+        padding_bytes = bytes([pad_length] * pad_length)
+        padded_data = data + padding_bytes
+        return padded_data
+    
+    def pkcs7_unpad(self, data):
+        pad_length = data[-1]
+        if not (1 <= pad_length <= 16):
+            raise ValueError("Invalid padding")
+        unpadded_data = data[:-pad_length]
+        return unpadded_data
+
+
+
+
+
+
+
+    def encrypt(self, plaintext, public_key, info=b'handshake data', mode="CBC"):
+        key = self.derive_shared_secret(public_key, info)
+        padded_plaintext = self.pkcs7_pad(plaintext, self.block_size) ##NEW
+
         if mode == "ECB":
             cipher = aes(key, 1)
             
-            encrypted = cipher.encrypt(plaintext)
+            encrypted = cipher.encrypt(padded_plaintext)    
             #print('AES-ECB encrypted:', encrypted )
 
             #cipher = aes(key,1) # cipher has to renew for decrypt 
@@ -131,7 +175,7 @@ class uECcrypto:
             iv = urandom(self.block_size)
             cipher = aes(key,2,iv)
 
-            ct_bytes = iv + cipher.encrypt(plaintext)
+            ct_bytes = iv + cipher.encrypt(padded_plaintext)    
             #print ('AES-CBC encrypted:', ct_bytes)
 
             #iv = ct_bytes[:self.block_size]
@@ -140,8 +184,10 @@ class uECcrypto:
             #print('AES-CBC decrypted:', decrypted)
             return ct_bytes
 
-    def decrypt(self, ciphertext, public_key, mode="CBC"):
-        key = self.derive_shared_secret(public_key)
+
+
+    def decrypt(self, ciphertext, public_key, info=b'handshake data', mode="CBC"):
+        key = self.derive_shared_secret(public_key, info)
         if mode == "ECB":
             encrypted = ciphertext
             cipher = aes(key, 1)
@@ -167,6 +213,13 @@ class uECcrypto:
 
             iv = ct_bytes[:self.block_size]
             cipher = aes(key,2,iv)
-            decrypted = cipher.decrypt(ct_bytes)[self.block_size:]
+
+            decrypted_with_iv = cipher.decrypt(ct_bytes)
+            decrypted_text = decrypted_with_iv[self.block_size:]
+
+            # Unpad the decrypted text
+            unpadded_decrypted_text = self.pkcs7_unpad(decrypted_text)
             #print('AES-CBC decrypted:', decrypted)
-            return decrypted
+            return unpadded_decrypted_text
+        else:
+            raise ValueError(f"Unknown mode: {mode}. Please choose from 'CBC' or 'ECB', where CBC is most secure.")
