@@ -10,7 +10,7 @@ def read_(file_name):
 
 setup(
     name="utinyec",
-    version="0.4.4",
+    version="0.4.5",
     packages=["utinyec"],
     requires=["base64","hmac"],
     author="Jack Lawrence",
