@@ -12,6 +12,7 @@ setup(
     name="utinyec",
     version="0.4.4",
     packages=["utinyec"],
+    requires=["base64","hmac"],
     author="Jack Lawrence",
     author_email="JackLawrenceCRISPR@gmail.com",
     description=(
